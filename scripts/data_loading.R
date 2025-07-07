@@ -6,9 +6,13 @@ library(dplyr)
 library(readr)
 library(lubridate)
 library(stringr)
+library(bigrquery)
+library(DBI)
 
 # Configuration
-DATA_RAW_PATH <- "credit_card_transactions.csv"
+PROJECT_ID <- Sys.getenv("GOOGLE_CLOUD_PROJECT", "anlaytics-465216")
+DATASET_ID <- "aml_data"
+TABLE_NAME <- "credit_card_transactions"
 DATA_PROCESSED_PATH <- "data/processed/transactions_clean.csv"
 
 # Create output directories
@@ -16,42 +20,76 @@ dir.create("data/processed", recursive = TRUE, showWarnings = FALSE)
 dir.create("outputs/reports", recursive = TRUE, showWarnings = FALSE)
 dir.create("outputs/alerts", recursive = TRUE, showWarnings = FALSE)
 
-# Load transaction data
-load_transaction_data <- function(file_path) {
-  cat("🔄 Loading transaction data from:", file_path, "\n")
+# Load transaction data from BigQuery
+load_transaction_data <- function() {
+  cat("🔄 Loading transaction data from BigQuery...\n")
+  cat("📡 Project:", PROJECT_ID, "\n")
+  cat("📊 Dataset:", DATASET_ID, "\n")
+  cat("📋 Table:", TABLE_NAME, "\n")
   
-  if (!file.exists(file_path)) {
-    stop("❌ Data file not found. Please download from Kaggle and place in current directory")
-  }
-  
-  transactions <- read_csv(file_path, 
-                          col_types = cols(
-                            trans_date_trans_time = col_datetime(),
-                            cc_num = col_double(),
-                            merchant = col_character(),
-                            category = col_character(),
-                            amt = col_double(),
-                            first = col_character(),
-                            last = col_character(),
-                            gender = col_character(),
-                            street = col_character(),
-                            city = col_character(),
-                            state = col_character(),
-                            zip = col_character(),
-                            lat = col_double(),
-                            long = col_double(),
-                            city_pop = col_double(),
-                            job = col_character(),
-                            dob = col_date(),
-                            trans_num = col_character(),
-                            unix_time = col_double(),
-                            merch_lat = col_double(),
-                            merch_long = col_double(),
-                            is_fraud = col_logical()
-                          ))
-  
-  cat("✅ Successfully loaded", nrow(transactions), "transactions\n")
-  return(transactions)
+  tryCatch({
+    # Connect to BigQuery
+    con <- dbConnect(
+      bigrquery::bigquery(),
+      project = PROJECT_ID,
+      dataset = DATASET_ID
+    )
+    
+    # Query all data
+    sql <- paste0("SELECT * FROM `", PROJECT_ID, ".", DATASET_ID, ".", TABLE_NAME, "`")
+    cat("🔍 SQL Query:", sql, "\n")
+    
+    transactions <- dbGetQuery(con, sql)
+    dbDisconnect(con)
+    
+    # Convert data types
+    transactions <- transactions %>%
+      mutate(
+        trans_date_trans_time = as.POSIXct(trans_date_trans_time),
+        dob = as.Date(dob),
+        is_fraud = as.logical(is_fraud)
+      )
+    
+    cat("✅ Successfully loaded", nrow(transactions), "transactions from BigQuery\n")
+    return(transactions)
+    
+  }, error = function(e) {
+    cat("❌ Error loading from BigQuery:", e$message, "\n")
+    cat("🔄 Falling back to local CSV file...\n")
+    
+    # Fallback to CSV if BigQuery fails
+    if (file.exists("credit_card_transactions.csv")) {
+      transactions <- read_csv("credit_card_transactions.csv", 
+                              col_types = cols(
+                                trans_date_trans_time = col_datetime(),
+                                cc_num = col_double(),
+                                merchant = col_character(),
+                                category = col_character(),
+                                amt = col_double(),
+                                first = col_character(),
+                                last = col_character(),
+                                gender = col_character(),
+                                street = col_character(),
+                                city = col_character(),
+                                state = col_character(),
+                                zip = col_character(),
+                                lat = col_double(),
+                                long = col_double(),
+                                city_pop = col_double(),
+                                job = col_character(),
+                                dob = col_date(),
+                                trans_num = col_character(),
+                                unix_time = col_double(),
+                                merch_lat = col_double(),
+                                merch_long = col_double(),
+                                is_fraud = col_logical()
+                              ))
+      cat("✅ Loaded", nrow(transactions), "transactions from CSV fallback\n")
+      return(transactions)
+    } else {
+      stop("❌ No data source available. BigQuery failed and no local CSV found.")
+    }
+  })
 }
 
 # Preprocess transaction data
@@ -178,8 +216,8 @@ generate_summary_statistics <- function(transactions) {
 main_data_loading <- function() {
   cat("🚀 Starting Level 1: Data Loading and Preprocessing\n")
   
-  # Load raw data
-  raw_transactions <- load_transaction_data(DATA_RAW_PATH)
+  # Load raw data from BigQuery
+  raw_transactions <- load_transaction_data()
   
   # Preprocess data
   clean_transactions <- preprocess_transaction_data(raw_transactions)
