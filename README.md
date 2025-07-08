@@ -56,12 +56,128 @@ The system uses a modern cloud-native architecture that separates heavy data pro
    make upload CSV=your_transactions.csv
    ```
 
-4. **Start the dashboard**
+4. **Start the professional dashboard**
    ```bash
-   Rscript app.R
+   Rscript run_professional_dashboard.R
    ```
 
 The dashboard will be available at http://localhost:8080
+
+## Cloud Deployment
+
+### Deploy to Google Cloud Run
+
+1. **Prerequisites**
+   ```bash
+   # Install and authenticate with Google Cloud SDK
+   gcloud auth login
+   gcloud config set project anlaytics-465216
+   
+   # Enable required services
+   gcloud services enable bigquery.googleapis.com
+   gcloud services enable cloudbuild.googleapis.com
+   gcloud services enable run.googleapis.com
+   gcloud services enable secretmanager.googleapis.com
+   ```
+
+2. **Set up authentication**
+   ```bash
+   # Create service account
+   gcloud iam service-accounts create aml-service-account --display-name="AML Service Account"
+   
+   # Grant BigQuery permissions
+   gcloud projects add-iam-policy-binding anlaytics-465216 \
+       --member="serviceAccount:aml-service-account@anlaytics-465216.iam.gserviceaccount.com" \
+       --role="roles/bigquery.jobUser"
+   
+   gcloud projects add-iam-policy-binding anlaytics-465216 \
+       --member="serviceAccount:aml-service-account@anlaytics-465216.iam.gserviceaccount.com" \
+       --role="roles/bigquery.dataEditor"
+   
+   # Create and download service account key
+   gcloud iam service-accounts keys create ~/aml-key.json \
+       --iam-account=aml-service-account@anlaytics-465216.iam.gserviceaccount.com
+   
+   export GOOGLE_APPLICATION_CREDENTIALS=~/aml-key.json
+   ```
+
+3. **Deploy complete system**
+   ```bash
+   chmod +x deploy-all.sh
+   ./deploy-all.sh
+   ```
+
+4. **Set up secure API key storage**
+   ```bash
+   # Store OpenAI API key in Secret Manager
+   echo "your-openai-api-key" | gcloud secrets create openai-api-key --data-file=-
+   
+   # Grant Cloud Run access to secret
+   gcloud secrets add-iam-policy-binding openai-api-key \
+       --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+       --role="roles/secretmanager.secretAccessor"
+   
+   # Update Cloud Run service
+   gcloud run services update aml-dashboard \
+       --update-secrets=OPENAI_API_KEY=openai-api-key:latest \
+       --region=us-central1
+   ```
+
+5. **Enable public access**
+   ```bash
+   gcloud run services update aml-dashboard \
+       --allow-unauthenticated \
+       --region=us-central1
+   ```
+
+### Deployment URLs
+- **Dashboard:** `https://aml-dashboard-PROJECT_NUMBER.us-central1.run.app`
+- **Cloud Function:** `aml-processor` (triggers automatically)
+
+## Troubleshooting
+
+### Common Issues
+
+**1. Docker build fails with "pandoc-citeproc" error**
+- This package is obsolete in newer Debian versions
+- The Dockerfile has been updated to exclude it
+
+**2. Go build fails with BigQuery API errors**
+- Ensure you're using the correct BigQuery Go client API
+- The source configuration should be on `bigquery.NewReaderSource()`, not the loader
+
+**3. Cloud Run "403 Forbidden" error**
+- Set authentication to "Allow unauthenticated invocations" in Security tab
+- Or run: `gcloud run services update aml-dashboard --allow-unauthenticated --region=us-central1`
+
+**4. Secret Manager permission denied**
+- Grant the Cloud Run service account access to secrets:
+  ```bash
+  gcloud secrets add-iam-policy-binding openai-api-key \
+      --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+      --role="roles/secretmanager.secretAccessor"
+  ```
+
+**5. BigQuery table not found**
+- Ensure dataset exists: `bq mk --dataset --location=US anlaytics-465216:aml_data`
+- Run setup script: `bq query --use_legacy_sql=false < sql/setup_metadata_table.sql`
+
+**6. R package compilation takes too long**
+- The Dockerfile installs many packages; first build takes 15-20 minutes
+- Subsequent builds use cached layers and are much faster
+- Consider using binary packages for faster builds
+
+### Performance Optimization
+
+**Cost-Efficient Settings:**
+- Cloud Run: 1GB RAM, 1 CPU, scale to zero
+- Cloud Function: 512MB RAM, auto-scaling
+- BigQuery: Pay per query, no always-on costs
+
+**Build Optimization:**
+- Use `.gcloudignore` to exclude unnecessary files
+- Docker layer caching reduces rebuild times
+- Binary R packages install faster than source compilation
 
 ## Data processing workflow
 
@@ -93,6 +209,22 @@ If you need to reprocess all data:
 ```bash
 bq query --use_legacy_sql=false < sql/run_all_aml_processing.sql
 ```
+
+## Dashboard options
+
+**Professional Dashboard** (Recommended):
+```bash
+Rscript run_professional_dashboard.R
+```
+- Dark theme with off-white accents
+- Advanced analytics and AI insights
+- Executive-level reporting
+
+**Basic Dashboard**:
+```bash
+Rscript app.R
+```
+- Simple interface for basic monitoring
 
 ## Dashboard features
 

@@ -1,0 +1,58 @@
+# Git files
+.git
+.gitignore
+
+# Build artifacts
+bin/
+*.exe
+*.so
+*.dylib
+
+# Documentation
+README.md
+*.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Go specific
+go.sum
+vendor/
+
+# R specific
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.Rproj.user
+
+# Large data files (only include if needed)
+# credit_card_transactions.csv
+
+# Test files
+*_test.go
+*_test.R
+test_*.R
+
+# Scripts (keep essential ones)
+scripts/level1_*
+scripts/level2_*
+
+# Makefile (not needed in container)
+Makefile
+
+# Environment files that might contain secrets
+# .env (commented out - we need this for the app)

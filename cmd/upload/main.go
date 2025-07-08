@@ -3,12 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/csv"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -203,12 +200,15 @@ func (u *AMLUploader) uploadCSVToBigQuery(csvFile string) error {
 	// Create table reference
 	tableRef := u.dataset.Table(TableName)
 
-	// Configure the load job
-	loader := tableRef.LoaderFrom(bigquery.NewReaderSource(file))
-	loader.SourceFormat = bigquery.CSV
-	loader.SkipLeadingRows = 1 // Skip header
-	loader.AutoDetect = true
-	loader.WriteDisposition = bigquery.WriteTruncate // Replace existing data
+	// Configure the reader source with CSV options
+	source := bigquery.NewReaderSource(file)
+	source.AutoDetect = true      // Allow BigQuery to determine schema
+	source.SkipLeadingRows = 1    // CSV has a single header line
+
+	// Create loader from configured source
+	loader := tableRef.LoaderFrom(source)
+	loader.CreateDisposition = bigquery.CreateIfNeeded
+	loader.WriteDisposition = bigquery.WriteTruncate
 
 	// Start the job
 	job, err := loader.Run(u.ctx)

@@ -79,7 +79,7 @@ ELSE
       MIN(minutes_since_last) as min_time_diff
     FROM velocity_data
     WHERE minutes_since_last <= 5 
-      AND transaction_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1)
+      AND transaction_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
     GROUP BY customer_id, transaction_date
     HAVING COUNT(*) >= 5
   )
